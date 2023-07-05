@@ -1,5 +1,6 @@
 # Case Study #1 - Danny's Diner
-![1](https://github.com/hanhdang9/8-Week-SQL-Challenge/assets/122140143/c3f26576-470f-46aa-ad5b-d3058ed7ba09)
+![1](https://github.com/hanhdang9/8-Week-SQL-Challenge/assets/122140143/deb475c8-ff07-4023-9c28-10947259d593)
+
 
 ## Table of Contents
 * [Context](#context)
@@ -13,7 +14,8 @@ Danny wants to use the data to answer a few simple questions about his customers
 ***
 ### Dataset
 #### Entity Relationship Diagram
-<img width="583" alt="Ảnh màn hình 2023-07-04 lúc 17 03 30" src="https://github.com/hanhdang9/8-Week-SQL-Challenge/assets/122140143/43b71308-245c-46c9-b8af-0ed7c14af557">
+<img width="583" alt="Ảnh màn hình 2023-07-04 lúc 17 03 30" src="https://github.com/hanhdang9/8-Week-SQL-Challenge/assets/122140143/2b4e0357-ad37-4a73-b1fc-b8a37dc62cbc">
+
 
 #### Example Datasets
 * Table 1: sales
