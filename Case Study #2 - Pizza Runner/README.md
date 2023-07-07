@@ -7,10 +7,10 @@
 * [Dataset](#dataset)
 * [Questions and Answer](#question-and-answer)
   * [Clean data](#clean-data)
-  * [A. Pizza Metrics](#a.-pizza-metrics)
-  * [B. Runner and Customer Experience](#b.-runner-and-customer-experience)
-  * [C. Ingredient Optimisation](#c.-ingredient-optimisation)
-  * [D. Pricing and Ratings](#d.-pricing-and-ratings)
+  * [A. Pizza Metrics](#a-pizza-metrics)
+  * [B. Runner and Customer Experience](#b-runner-and-customer-experience)
+  * [C. Ingredient Optimisation](#c-ingredient-optimisation)
+  * [D. Pricing and Ratings](#d-pricing-and-ratings)
 ***
 ### Context
 Danny launched Pizza Runner and started by recruiting “runners” to deliver fresh pizza from Pizza Runner Headquarters (otherwise known as Danny’s house) and also maxed out his credit card to pay freelance developers to build a mobile app to accept orders from customers.
@@ -649,12 +649,327 @@ FROM
 | Cheese                |
 ***
 **4. Generate an order item for each record in the customers_orders table in the format of one of the following:**
-	`Meat Lovers`;
-	`Meat Lovers - Exclude Beef`;
-	`Meat Lovers - Extra Bacon`;
-	`Meat Lovers - Exclude Cheese, Bacon - Extra Mushroom, Peppers`;
+
+`Meat Lovers`;
+
+`Meat Lovers - Exclude Beef`;
+
+`Meat Lovers - Extra Bacon`;
+
+`Meat Lovers - Exclude Cheese, Bacon - Extra Mushroom, Peppers`;
 
 *Step 1: we create a complete_table adding 3 columns (pizza name, exclusion topping names and extra topping names) to new_customer_orders table.*
+
 *Step 2: we create order item column by concatenating 3 columns above.*
-- To create pizza_name column, `JOIN` new_customer_orders and pizza_names table `ON` the same pizza_id.
-- To create exclusion topping name and extra topping name columns, we use `UNNEST` AND `STRING_AGG` function.
+
+````sql
+-- To create pizza_name column, `JOIN` new_customer_orders and pizza_names table `ON` the same pizza_id.
+-- To create exclusion topping name and extra topping name columns, we use `UNNEST` AND `STRING_AGG` function.
+
+DROP TABLE IF EXISTS complete_table;
+CREATE TEMP TABLE complete_table AS(
+
+-- Firstly, create table1 which transfer NULL exclusions and NULL extras orders to '0' then we could use UNNEST function with exclusions and extras and still can retrieve the whole data
+
+	WITH 
+		table1 AS(
+			SELECT
+				order_id,
+				customer_id,
+				pizza_id,
+				CASE WHEN exclusions IS NULL THEN '0' ELSE exclusions END,
+				CASE WHEN extras IS NULL THEN '0' ELSE extras END,
+				order_time
+			FROM new_customer_orders
+		),
+
+-- Then, we UNNEST exclusions and extras to get separate exclusion and extra topping ids, we also `JOIN` pizza_names table to get pizza_name column
+
+ 		table2 AS(
+			SELECT
+				order_id,
+				customer_id,
+				tbl1.pizza_id,
+				ROW_NUMBER() OVER(PARTITION BY order_id),
+				UNNEST(string_to_array(exclusions, ',')):: numeric exclu_topping_id,
+				UNNEST(string_to_array(extras, ',')):: numeric extra_topping_id,
+				order_time,
+				pizza_name
+			FROM table1 tbl1
+				JOIN pizza_names n ON tbl1.pizza_id = n.pizza_id
+			ORDER BY 1
+		),
+
+-- Next, we `JOIN` table2 with pizza_toppings table to get the exclusion and extra topping names
+
+		table3 AS(
+			SELECT tbl2.*,
+					p.topping_name exclu_topping_name
+			FROM table2 tbl2
+				LEFT JOIN pizza_toppings p ON tbl2.exclu_topping_id = p.topping_id
+		),
+		table4 AS(
+			SELECT 
+				tbl3.*,
+				topping_name extra_topping_name
+			FROM table3 tbl3
+				LEFT JOIN pizza_toppings p ON tbl3.extra_topping_id = p.topping_id
+		),
+-- Next, we aggregate exclu_topping_name and extra_topping_name
+
+		table5 AS(
+			SELECT 
+				order_id,
+				customer_id,
+				pizza_id,
+				row_number,
+				string_agg(exclu_topping_id :: text,', ') exclu_id,
+				string_agg(extra_topping_id :: text,', ') extra_id,
+				order_time,
+				pizza_name,
+				string_agg(exclu_topping_name,', ') exclu_name,
+				string_agg(extra_topping_name,', ') extra_name
+			FROM table4
+			GROUP BY 1,2,3,4,7,8
+			ORDER BY order_id
+		)
+
+-- table5 is the complete_table we want.
+
+	SELECT * FROM table5
+);
+-- Finally, we concatenate pizza_name, exclu_name, extra_name columns to get the answer for the question
+SELECT 
+	order_id,
+	customer_id,
+	pizza_id,
+	CASE WHEN exclu_id = '0' THEN NULL ELSE exclu_id END AS exclusions,
+	CASE WHEN extra_id = '0' THEN NULL ELSE extra_id END AS extras,
+	order_time,
+	CASE
+		WHEN exclu_name IS NULL AND extra_name IS NULL THEN pizza_name
+		WHEN exclu_name IS NULL AND extra_name IS NOT NULL THEN pizza_name||' - Extra '||extra_name
+		WHEN exclu_name IS NOT NULL AND extra_name IS NULL THEN pizza_name||' - Exclude '||exclu_name
+		WHEN exclu_name IS NOT NULL AND extra_name IS NOT NULL THEN pizza_name||' - Exclude '||exclu_name||' - Extra '||extra_name
+	END AS order_item
+FROM complete_table;
+````
+
+*Answer:*
+
+| **order_id** | **customer_id** | **pizza_id** | **exclusions** | **extras** | **order_time**      | **order_item**                                                  |
+| ------------ | --------------- | ------------ | -------------- | ---------- | ------------------- | --------------------------------------------------------------- |
+| **1**        | 101             | 1            |                |            | 2020-01-01 18:05:02 | Meatlovers                                                      |
+| **2**        | 101             | 1            |                |            | 2020-01-01 19:00:52 | Meatlovers                                                      |
+| **3**        | 102             | 1            |                |            | 2020-01-02 23:51:23 | Meatlovers                                                      |
+| **3**        | 102             | 2            |                |            | 2020-01-02 23:51:23 | Vegetarian                                                      |
+| **4**        | 103             | 1            | 4              |            | 2020-01-04 13:23:46 | Meatlovers - Exclude Cheese                                     |
+| **4**        | 103             | 2            | 4              |            | 2020-01-04 13:23:46 | Vegetarian - Exclude Cheese                                     |
+| **4**        | 103             | 1            | 4              |            | 2020-01-04 13:23:46 | Meatlovers - Exclude Cheese                                     |
+| **5**        | 104             | 1            |                | 1          | 2020-01-08 21:00:29 | Meatlovers - Extra Bacon                                        |
+| **6**        | 101             | 2            |                |            | 2020-01-08 21:03:13 | Vegetarian                                                      |
+| **7**        | 105             | 2            |                | 1          | 2020-01-08 21:20:29 | Vegetarian - Extra Bacon                                        |
+| **8**        | 102             | 1            |                |            | 2020-01-09 23:54:33 | Meatlovers                                                      |
+| **9**        | 103             | 1            | 4              | 1, 5       | 2020-01-10 11:22:59 | Meatlovers - Exclude Cheese - Extra Bacon, Chicken              |
+| **10**       | 104             | 1            | 2, 6           | 1, 4       | 2020-01-11 18:34:49 | Meatlovers - Exclude BBQ Sauce, Mushrooms - Extra Bacon, Cheese |
+| **10**       | 104             | 1            |                |            | 2020-01-11 18:34:49 | Meatlovers                                                      |
+***
+#### D. Pricing and Ratings
+
+**1. If a Meat Lovers pizza costs $12 and Vegetarian costs $10 and there were no charges for changes - how much money has Pizza Runner made so far if there are no delivery fees?**
+
+````sql
+SELECT
+	SUM(
+		CASE
+			WHEN pizza_id = 1 THEN 12 
+			WHEN pizza_id = 2 THEN 10
+		END) AS income
+FROM new_customer_orders c
+	JOIN new_runner_orders r ON c.order_id = r.order_id
+WHERE cancellation IS NULL;
+````
+
+*Answer:*
+
+| **income** |
+| ---------- |
+| 138        |
+***
+**2.1 What if there was an additional $1 charge for any pizza extras?**
+
+````sql
+WITH income_table AS(
+	SELECT 
+		*,
+		CASE 
+			WHEN (ROW_NUMBER() OVER(PARTITION BY order_id)) = 1
+			THEN 0 ELSE 1 END extra_pizza_fee,
+		CASE
+			WHEN pizza_id = 1 THEN 12 
+			WHEN pizza_id = 2 THEN 10
+		END AS income
+	FROM 
+		new_customer_orders
+)
+SELECT 
+	SUM(extra_pizza_fee + income) income
+FROM 
+	income_table i
+	JOIN new_runner_orders r ON i.order_id = r.order_id
+WHERE r.cancellation IS NULL;
+````
+
+*Answer:*
+
+| **income** |
+| ---------- |
+| 142        |
+
+**2.2. What if adding cheese is $1 extra?**
+
+- Create a temporary table named complete_table combining new_customer_orders and extra_pizza_fee column with $1 extra for every additional pizza and $1 extra for adding cheese:
+
+````sql
+WITH 
+	n_new_customer_orders AS(
+		SELECT
+			order_id,
+			customer_id,
+			pizza_id,
+			CASE WHEN exclusions IS NULL THEN '0' ELSE exclusions END,
+			CASE WHEN extras IS NULL THEN '0' ELSE extras END,
+			order_time
+		FROM new_customer_orders
+	),
+ 	complete_table AS(
+		SELECT
+			order_id,
+			customer_id,
+			c.pizza_id,
+			UNNEST(string_to_array(exclusions, ',')):: numeric exclu_topping_id,
+			UNNEST(string_to_array(extras, ',')):: numeric extra_topping_id,
+			ROW_NUMBER() OVER(PARTITION BY order_id) pizza_num,
+			CASE 
+				WHEN (ROW_NUMBER() OVER(PARTITION BY order_id)) = 1
+				THEN 0 ELSE 1 END extra_pizza_fee,
+			CASE
+				WHEN c.pizza_id = 1 THEN 12 
+				WHEN c.pizza_id = 2 THEN 10
+			END AS income
+		FROM n_new_customer_orders c
+		ORDER BY 1
+	)
+SELECT 
+	SUM(income + extra_pizza_fee + cheese_adding_fee) AS income
+FROM
+	(SELECT 
+		*,
+		CASE 
+			WHEN extra_topping_id = 4 
+			THEN 1 ELSE 0 END AS cheese_adding_fee
+	FROM complete_table) AS t
+JOIN new_runner_orders r
+ON t.order_id = r.order_id
+WHERE cancellation IS NULL;
+````
+
+*Answer:*
+
+| **income** |
+| ---------- |
+| 156        |
+***
+**3. The Pizza Runner team now wants to add an additional ratings system that allows customers to rate their runner, how would you design an additional table for this new dataset - generate a schema for this new table and insert your own data for ratings for each successful customer order between 1 to 5.**
+
+````sql
+DROP TABLE IF EXISTS rating;
+CREATE TABLE rating (
+	"order_id" INTEGER,
+	"rating" INTEGER
+);
+INSERT INTO rating
+	("order_id","rating")
+VALUES
+	('1','4'),
+	('2','5'),
+	('3','3'),
+	('4','5'),
+	('5','2'),
+	('7','1'),
+	('8','5'),
+	('10','5');
+````
+
+*Result:*
+
+````sql
+SELECT * FROM rating;
+````
+
+| **order_id** | **rating** |
+| ------------ | ---------- |
+| **1**        | 4          |
+| **2**        | 5          |
+| **3**        | 3          |
+| **4**        | 5          |
+| **5**        | 2          |
+| **7**        | 1          |
+| **8**        | 5          |
+| **10**       | 5          |
+***
+**4. Using your newly generated table - can you join all of the information together to form a table which has the following information for successful deliveries?**
+
+`customer_id`
+
+`order_id`
+
+`runner_id`
+
+`rating`
+
+`order_time`
+
+`pickup_time`
+
+Time between order and pickup
+
+Delivery duration
+
+Average speed
+
+Total number of pizzas
+
+````sql
+SELECT
+	customer_id,
+	c.order_id,
+	r.runner_id,
+	rating,
+	order_time,
+	pickup_time,
+	TO_CHAR(pickup_time - order_time,'MI') AS prepare_time,
+	duration AS deli_duration,
+	ROUND(distance/(duration/60),2) AS speed_in_kmh,
+	COUNT(*) num_of_pizza
+FROM
+	new_customer_orders c
+	JOIN new_runner_orders r ON c.order_id = r.order_id AND r.cancellation IS NULL
+	JOIN rating rt ON c.order_id = rt.order_id
+GROUP BY 1,2,3,4,5,6,7,8,9
+ORDER BY 2;
+````
+
+*Answer:*
+
+| **customer_id** | **order_id** | **runner_id** | **rating** | **order_time**      | **pickup_time**     | **prepare_time** | **deli_duration** | **speed_in_kmh** | **num_of_pizza** |
+| --------------- | ------------ | ------------- | ---------- | ------------------- | ------------------- | ---------------- | ----------------- | ---------------- | ---------------- |
+| **101**         | 1            | 1             | 4          | 2020-01-01 18:05:02 | 2020-01-01 18:15:34 | 10               | 32                | 37.50            | 1                |
+| **101**         | 2            | 1             | 5          | 2020-01-01 19:00:52 | 2020-01-01 19:10:54 | 10               | 27                | 44.44            | 1                |
+| **102**         | 3            | 1             | 3          | 2020-01-02 23:51:23 | 2020-01-03 00:12:37 | 21               | 20                | 40.20            | 2                |
+| **103**         | 4            | 2             | 5          | 2020-01-04 13:23:46 | 2020-01-04 13:53:03 | 29               | 40                | 35.10            | 3                |
+| **104**         | 5            | 3             | 2          | 2020-01-08 21:00:29 | 2020-01-08 21:10:57 | 10               | 15                | 40.00            | 1                |
+| **105**         | 7            | 2             | 1          | 2020-01-08 21:20:29 | 2020-01-08 21:30:45 | 10               | 25                | 60.00            | 1                |
+| **102**         | 8            | 2             | 5          | 2020-01-09 23:54:33 | 2020-01-10 00:15:02 | 20               | 15                | 93.60            | 1                |
+| **104**         | 10           | 1             | 5          | 2020-01-11 18:34:49 | 2020-01-11 18:50:20 | 15               | 10                | 60.00            | 2                |
+***
