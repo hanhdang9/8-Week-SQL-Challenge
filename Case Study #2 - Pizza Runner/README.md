@@ -103,7 +103,7 @@ If you want to learn more details about the case study, please visit [Case Study
 ### Questions and Answers
 #### Clean data
 
-Take a look at the customer_orders table, we see the exclusions and extras columns will need to be cleaned up before using them in queries. We will create a temporary table named new_customer_orders with cleaned data.
+* Take a look at the customer_orders table, we see the exclusions and extras columns will need to be cleaned up before using them in queries. We will create a temporary table named new_customer_orders with cleaned data.
 
 ````sql
 SET search_path = pizza_runner;
@@ -118,7 +118,7 @@ CREATE TEMP TABLE new_customer_orders AS (
 	FROM customer_orders
 );
 ````
-Take a look at the new_customer_orders to see it's good to use now:
+* Take a look at the new_customer_orders to see it's good to use now:
 
 ````sql
 SELECT * FROM new_customer_orders;
@@ -143,7 +143,7 @@ Result:
 | **10**       | 104             | 1            |                |            | 2020-01-11 18:34:49 |
 | **10**       | 104             | 1            | 2, 6           | 1, 4       | 2020-01-11 18:34:49 |
 ***
-Take a look at the runner_orders table, we see the distance and duration columns need to be cleaned before any analysing. We will create a temporary table named new_runner_orders with cleaned data.
+* Take a look at the runner_orders table, we see the distance and duration columns need to be cleaned before any analysing. We will create a temporary table named new_runner_orders with cleaned data.
 
 ````sql
 DROP TABLE IF EXISTS new_runner_orders;
@@ -163,7 +163,7 @@ CREATE TEMP TABLE new_runner_orders AS (
 );
 ````
 
-Take a look at the new_customer_orders to see it's good to use now:
+* Take a look at the new_customer_orders to see it's good to use now:
 
 ````sql
 SELECT * FROM new_runner_orders;
@@ -452,7 +452,7 @@ ORDER BY 1;
 | **2**         | 18.38                          |
 | **3**         | 29.28                          |
 
-Look at the result, we see the number of pizzas does have relationship with preparation time.
+* Look at the result, we see the number of pizzas does have relationship with preparation time.
 The more pizzas ordered, the longer preparation time.
 ***
 **4. What was the average distance travelled for each customer?**
@@ -474,7 +474,7 @@ FROM new_runner_orders;
 ***
 **6. What was the average speed for each runner for each delivery and do you notice any trend for these values?**
 
-We calculate the runners' average speed with calculation unit is km/h:
+* We calculate the runners' average speed with calculation unit is km/h:
 
 ````sql
 SELECT 
@@ -495,9 +495,9 @@ ORDER BY 1;
 | **2**         | 62.90             |
 | **3**         | 40.00             |
 
-From the result, we could see the runner_id = 3 has the lowest speed, it might because he is newbie.
+* From the result, we could see the runner_id = 3 has the lowest speed, it might because he is newbie.
 
-We also could see runner_id 2 is much faster than other two, we could take a look at his orders to have more insights:
+* We also could see runner_id 2 is much faster than other two, we could take a look at his orders to have more insights:
 
 ````sql
 SELECT 
@@ -515,7 +515,7 @@ WHERE runner_id = 2;
 | **8**        | 93.60     |
 | **9**        |           |
 
-We could see with order_id = 8, the runner 2 might violate the law with a too high speed which could bring good experience to customer but actually could harm the runner as well as the business.
+* We could see with order_id = 8, the runner 2 might violate the law with a too high speed which could bring good experience to customer but actually could harm the runner as well as the business.
 ***
 **7. What is the successful delivery percentage for each runner?**
 
@@ -537,3 +537,124 @@ ORDER BY 1;
 | **3**         | 50                              |
 ***
 #### C. Ingredient Optimisation
+
+**1. What are the standard ingredients for each pizza?**
+
+- Firstly, we will create a temporary table named "new_pizza_recipes" with long format for the recipe of each pizza.
+````sql
+DROP TABLE IF EXISTS new_pizza_recipes;
+CREATE TEMP TABLE new_pizza_recipes AS(
+	SELECT 
+		pizza_id,
+		trim(unnest(string_to_array(toppings, ','))):: integer topping_id
+	FROM 
+		pizza_runner.pizza_recipes
+);
+````
+- Then, we join pizza_name, new_pizza_recipes and pizza_toppings together to get the answer for the question:
+````sql
+SELECT 
+	pizza_name,
+	r.topping_id,
+	topping_name
+FROM pizza_names n
+	JOIN new_pizza_recipes r ON n.pizza_id = r.pizza_id
+	JOIN pizza_toppings t ON r.topping_id = t.topping_id
+ORDER BY 1,2;
+````
+
+*Answer:*
+
+| **pizza_name** | **topping_id** | **topping_name** |
+| -------------- | -------------- | ---------------- |
+| **Meatlovers** | 1              | Bacon            |
+| **Meatlovers** | 2              | BBQ Sauce        |
+| **Meatlovers** | 3              | Beef             |
+| **Meatlovers** | 4              | Cheese           |
+| **Meatlovers** | 5              | Chicken          |
+| **Meatlovers** | 6              | Mushrooms        |
+| **Meatlovers** | 8              | Pepperoni        |
+| **Meatlovers** | 10             | Salami           |
+| **Vegetarian** | 4              | Cheese           |
+| **Vegetarian** | 6              | Mushrooms        |
+| **Vegetarian** | 7              | Onions           |
+| **Vegetarian** | 9              | Peppers          |
+| **Vegetarian** | 11             | Tomatoes         |
+| **Vegetarian** | 12             | Tomato Sauce     |
+
+- We could make it easier to see by this way as below:
+
+````sql
+SELECT 
+	pizza_name,
+	STRING_AGG(topping_name, ', ')
+FROM pizza_names n
+	JOIN new_pizza_recipes r ON n.pizza_id = r.pizza_id
+	JOIN pizza_toppings t ON r.topping_id = t.topping_id
+GROUP BY 1;
+````
+| **pizza_name** | **string_agg**                                                        |
+| -------------- | --------------------------------------------------------------------- |
+| **Meatlovers** | Bacon, BBQ Sauce, Beef, Cheese, Chicken, Mushrooms, Pepperoni, Salami |
+| **Vegetarian** | Cheese, Mushrooms, Onions, Peppers, Tomatoes, Tomato Sauce            |
+***
+**2. What was the most commonly added extra?**
+
+````sql
+SELECT
+	topping_name most_common_add
+FROM
+	(
+	SELECT
+		COUNT(*),
+		UNNEST(string_to_array(extras, ',')):: numeric as topping_id
+	FROM new_customer_orders
+	WHERE extras IS NOT NULL
+	GROUP BY 2
+	ORDER BY 1 DESC
+	LIMIT 1
+	) AS most_common_extra 
+	JOIN pizza_toppings t ON most_common_extra.topping_id = t.topping_id;
+````
+
+*Answer:*
+
+| **most_common_add** |
+| ------------------- |
+| Bacon               |
+***
+**3. What was the most common exclusion?**
+
+````sql
+SELECT
+	topping_name most_common_exclu
+FROM
+	(
+	SELECT
+		COUNT(*),
+		TRIM(UNNEST(string_to_array(exclusions, ','))):: numeric as topping_id
+	FROM new_customer_orders
+	WHERE exclusions IS NOT NULL
+	GROUP BY 2
+	ORDER BY 1 DESC
+	LIMIT 1
+	) AS most_exclu 
+	JOIN pizza_toppings t ON most_exclu.topping_id = t.topping_id;
+````
+
+*Answer:*
+
+| **most_common_exclu** |
+| --------------------- |
+| Cheese                |
+***
+**4. Generate an order item for each record in the customers_orders table in the format of one of the following:**
+	`Meat Lovers`;
+	`Meat Lovers - Exclude Beef`;
+	`Meat Lovers - Extra Bacon`;
+	`Meat Lovers - Exclude Cheese, Bacon - Extra Mushroom, Peppers`;
+
+*Step 1: we create a complete_table adding 3 columns (pizza name, exclusion topping names and extra topping names) to new_customer_orders table.*
+*Step 2: we create order item column by concatenating 3 columns above.*
+- To create pizza_name column, `JOIN` new_customer_orders and pizza_names table `ON` the same pizza_id.
+- To create exclusion topping name and extra topping name columns, we use `UNNEST` AND `STRING_AGG` function.
