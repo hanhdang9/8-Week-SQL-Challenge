@@ -232,7 +232,176 @@ WHERE
 ***
 **6. What is the number and percentage of customer plans after their initial free trial?**
 
+````sql
 
+WITH tem_table AS(
+	SELECT
+		*,
+		ROW_NUMBER() OVER(PARTITION BY customer_id ORDER BY plan_id) AS count_plan
+	FROM
+		subscriptions
+	)
+SELECT *
+FROM tem_table
+WHERE count_plan = 1 OR count_plan = 2;
+````
+- I've tried to:
+````sql
+SELECT COUNT(*), COUNT(DISTINCT customer_id)
+FROM tem_table
+WHERE count_plan = 1 OR count_plan = 2;
+````
+- The results are 2000 and 1000, means there no customer just only has plan_id = 0 (new customer for example). They all have plan_id = 0, then at least 1 other plan_id. That means the count_plan = 2 for any customer is the plan after their initial trial.
+
+````sql
+WITH tem_table AS(
+	SELECT
+		*,
+		ROW_NUMBER() OVER(PARTITION BY customer_id ORDER BY plan_id) AS count_plan
+	FROM
+		subscriptions
+	)
+SELECT 
+	plan_name,
+	COUNT(*) plan_num,
+	ROUND((100*COUNT(*)::numeric/
+		(	
+			SELECT
+			COUNT(DISTINCT customer_id) cus_num
+		FROM subscriptions
+		))
+		, 1) plan_percentage
+		
+FROM 
+	tem_table t
+	JOIN plans p ON t.plan_id = p.plan_id
+WHERE 
+	count_plan = 2
+GROUP BY 1;
+````
+
+*Answer*
+
+| **plan_name**     | **plan_num** | **plan_percentage** |
+| ----------------- | ------------ | ------------------- |
+| **basic monthly** | 546          | 54.6                |
+| **churn**         | 92           | 9.2                 |
+| **pro annual**    | 37           | 3.7                 |
+| **pro monthly**   | 325          | 32.5                |
+***
+**7. What is the customer count of all 5 plan_name values at 2020-12-31?**
+
+````sql
+WITH latest_plan AS(
+		SELECT
+			customer_id,
+			plan_id,
+			RANK() OVER(PARTITION BY customer_id ORDER BY start_date DESC) ranking
+		FROM subscriptions
+		WHERE start_date <= '2020-12-31'
+		ORDER BY 1
+)
+
+SELECT
+	plan_name,
+	COUNT(*) cus_num
+FROM 
+	latest_plan l
+	JOIN plans p ON l.plan_id = p.plan_id
+WHERE ranking = 1
+GROUP BY 1;
+````
+
+*Answer:*
+
+| **plan_name**     | **cus_num** |
+| ----------------- | ----------- |
+| **basic monthly** | 224         |
+| **churn**         | 236         |
+| **pro annual**    | 195         |
+| **pro monthly**   | 326         |
+| **trial**         | 19          |
+***
+**8. How many customers have upgraded to an annual plan in 2020?**
+
+````sql
+SELECT 
+	COUNT(DISTINCT customer_id)
+FROM subscriptions
+WHERE 
+	plan_id = 3
+	AND DATE_PART('year', start_date) = 2020;
+````
+
+*Answer:*
+
+| **count** |
+| --------- |
+| 195       |
+***
+**9. How many days on average does it take for a customer to an annual plan from the day they join Foodie-Fi?**
+
+````sql
+WITH annual_customer AS(
+	SELECT 
+		customer_id
+	FROM subscriptions
+	WHERE 
+		plan_id = 3
+),
+	lg AS(
+	SELECT
+		s.*,
+		ROW_NUMBER() OVER(PARTITION BY s.customer_id) rk,
+		LAG(start_date) OVER(PARTITION BY s.customer_id) lag
+	FROM
+		subscriptions s
+		JOIN annual_customer a ON s.customer_id = a.customer_id
+	WHERE plan_id = 0 or plan_id = 3
+)
+SELECT
+	ROUND(AVG(start_date - lag),2) AS avg_day_num
+FROM lg
+WHERE rk = 2;
+````
+
+*Answer:*
+
+| **avg_day_num** |
+| --------------- |
+| 104.62          |
+***
+**10. Can you further breakdown this average value into 30 day periods (i.e. 0-30 days, 31-60 days etc)**
+***
+**11. How many customers downgraded from a pro monthly to a basic monthly plan in 2020?**
+
+````sql
+WITH sub AS(
+	SELECT
+		*,
+		ROW_NUMBER() OVER(PARTITION BY customer_id ORDER BY start_date) row_num
+	FROM subscriptions
+	WHERE 
+		DATE_PART('year', start_date) = 2020 AND
+		(plan_id = 0 OR plan_id = 1 OR plan_id = 2)
+)
+-- As the row_num column is ordered by start_date, the customers downgraded from a pro monthly to a basic monthly plan
+-- will have plan_id = 1 with the row_num = 3.
+SELECT 
+	COUNT(*)
+FROM sub 
+WHERE 
+	plan_id = 1 AND
+	row_num = 3;
+````
+
+*Answer:*
+
+| **count** |
+| --------- |
+| 0         |
+
+- Conclusion: there is no customers downgraded from a pro monthly to a basic monthly plan in 2020.
 
 
 
