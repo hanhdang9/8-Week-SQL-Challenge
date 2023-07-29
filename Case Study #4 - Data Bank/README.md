@@ -19,6 +19,7 @@ Danny thought that there should be some sort of intersection between these new a
 
 This case study is all about calculating metrics, growth and helping the business analyse their data in a smart way to better forecast and plan for their future developments!
 ***
+
 ### Dataset
 
 #### Entity Relationship Diagram
