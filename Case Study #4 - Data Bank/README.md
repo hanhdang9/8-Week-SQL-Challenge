@@ -21,10 +21,10 @@ This case study is all about calculating metrics, growth and helping the busines
 ***
 
 ### Dataset
-
 #### Entity Relationship Diagram
 
 <img width="544" alt="case-study-4-erd" src="https://github.com/hanhdang9/8-Week-SQL-Challenge/assets/122140143/5354403e-1387-45cc-b34b-548e7899fbb1">
+
 ***
 ### Example Datasets
 
