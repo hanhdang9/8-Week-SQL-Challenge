@@ -108,7 +108,7 @@ GROUP BY 1;
 | **Australia**   | 5            |
 | **Europe**      | 5            |
 ***
-**3. How many customers are allocated to each region?
+**3. How many customers are allocated to each region?**
 
 ````sql
 SELECT
@@ -130,7 +130,7 @@ GROUP BY 1;
 | **Australia**   | 110         |
 | **Europe**      | 88          |
 ***
-**-- 4. How many days on average are customers reallocated to a different node?**
+**4. How many days on average are customers reallocated to a different node?**
 
 ````sql
 -- Firstly we create reallocation table with a lag column that shows every customer's previous start date. Then we calculate the different between periods by taking start_date column minus lag column, located in "different" column.
